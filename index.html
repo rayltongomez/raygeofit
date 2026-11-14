@@ -2123,7 +2123,7 @@ function lembreteSave(c){ try { localStorage.setItem(LEMBRETE_KEY, JSON.stringif
 function lembreteCard(){
   const c = lembreteCfg();
   let aviso = "Funciona enquanto o app estiver aberto ou instalado na tela inicial.";
-  if(!("Notification" in window)) aviso = "Este navegador não oferece notificações.";
+  if(!("Notification" in window)) aviso = "Toque no botão para ver como ativar. No iPhone, o app precisa estar instalado na tela inicial.";
   else if(Notification.permission === "denied") aviso = "Notificações bloqueadas nas configurações do navegador.";
   return `<div class="card"><h2>Lembrete de treino</h2>
     <div class="row"><span>Avisar no dia do treino</span><button class="chip ${c.on?"on":""}" id="btnLembrete">${c.on?"Ativado":"Desativado"}</button></div>
@@ -2135,9 +2135,15 @@ document.addEventListener("click", async e => {
   if(!e.target.closest || !e.target.closest("#btnLembrete")) return;
   const c = lembreteCfg();
   if(!c.on){
-    if(!("Notification" in window)) return renderProfile();
+    if(!("Notification" in window)){
+      alert("Este navegador não oferece lembretes. No iPhone, instale o app na tela inicial (Compartilhar → Adicionar à Tela de Início), abra pelo ícone e tente de novo.");
+      return;
+    }
     const perm = Notification.permission === "default" ? await Notification.requestPermission() : Notification.permission;
-    if(perm !== "granted") return renderProfile();
+    if(perm !== "granted"){
+      alert("As notificações não foram permitidas. Ative nas configurações do celular para este app e tente de novo.");
+      return renderProfile();
+    }
     c.on = true;
   } else c.on = false;
   lembreteSave(c); renderProfile();
