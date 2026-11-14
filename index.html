@@ -403,6 +403,8 @@
   .crit-grid small { color:var(--mut); font-size:11px; }
   .rev-card { border-top:1px solid var(--line); padding:12px 0; }
   .nota-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:6px; }
+  .popup-av { position:fixed; inset:0; background:rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center; z-index:999; padding:20px; }
+  .popup-box { background:var(--card); border:1px solid var(--line); border-radius:18px; padding:20px; max-width:320px; width:100%; text-align:center; }
 </style>
 </head>
 <body>
@@ -665,6 +667,7 @@ function pullRemote(){
     if(!json || json === lastSyncJson || pushTimer) return;
     lastSyncJson = json;
     const d = JSON.parse(json);
+    checarAvaliacoes(d.sessions||{});
     applyingRemote = true;
     state = { me:state.me, sessions:d.sessions||{}, log:d.log||[], routine:d.routine||null, libExtra:d.libExtra||[], perfil:d.perfil||{} };
     saveLocal();
@@ -1876,6 +1879,45 @@ function renderAvaliacoes(){
           <strong>Nota ${a.nota10 ?? "—"}/10 · Foco ${a.foco}/5</strong>
         </div>`).join("") : `<small class="muted">Você ainda não avaliou nenhum treino.</small>`}
     </div>`;
+}
+
+
+/* ===================== POPUP DE AVALIAÇÃO RECEBIDA ===================== */
+function mostrarPopupAvaliacao(titulo, corpo){
+  if(document.querySelector(".popup-av")) return;
+  const el = document.createElement("div");
+  el.className = "popup-av";
+  el.innerHTML = `<div class="popup-box">
+      <strong style="font-size:17px">${esc(titulo)}</strong>
+      <div class="muted" style="margin:8px 0 14px">${esc(corpo)}</div>
+      <button class="btn" id="popupVer">Ver avaliação</button>
+      <button class="chip" id="popupFechar" style="margin-top:8px;width:100%">Fechar</button>
+    </div>`;
+  document.body.appendChild(el);
+  el.querySelector("#popupVer").onclick = () => { el.remove(); show("s-reviews"); };
+  el.querySelector("#popupFechar").onclick = () => el.remove();
+  el.addEventListener("click", ev => { if(ev.target === el) el.remove(); });
+  try {
+    if("Notification" in window && Notification.permission === "granted" && document.hidden)
+      new Notification(titulo, { body: corpo });
+  } catch(e){}
+}
+// Procura avaliações novas do meu treino. Na primeira vez neste aparelho, só registra o que já existe, sem avisar.
+function checarAvaliacoes(sessoes){
+  if(!state.me) return;
+  const atuais = Object.entries(sessoes).filter(([k,s]) => k.endsWith("|"+state.me) && s.avaliacao && s.avaliacao.por !== state.me);
+  const chaves = atuais.map(([k,s]) => k+"#"+(s.avaliacao.em||""));
+  let vistas = null;
+  try { vistas = JSON.parse(localStorage.getItem("rg-vistas")); } catch(e){}
+  if(!Array.isArray(vistas)){ localStorage.setItem("rg-vistas", JSON.stringify(chaves)); return; }
+  const novas = atuais.filter(([k,s]) => !vistas.includes(k+"#"+(s.avaliacao.em||"")));
+  localStorage.setItem("rg-vistas", JSON.stringify(chaves));
+  if(!novas.length) return;
+  const [k, s] = novas[0];
+  const dia = ROUTINE[k.split("|")[1]] ? ROUTINE[k.split("|")[1]].label : "treino";
+  const quem = PEOPLE[s.avaliacao.por] || "Seu parceiro";
+  const extra = novas.length > 1 ? ` (+${novas.length-1} outra(s))` : "";
+  mostrarPopupAvaliacao("Treino avaliado!", `${quem} avaliou seu treino de ${dia}: nota ${s.avaliacao.nota10 ?? "—"}/10${extra}.`);
 }
 
 /* ===================== PERFIL PESSOAL E DUPLA ===================== */
