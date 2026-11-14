@@ -398,6 +398,11 @@
   .pf-in { width:100%; background:var(--card); color:var(--txt); border:1px solid var(--line); border-radius:10px; padding:10px; margin:4px 0 10px; font:inherit; box-sizing:border-box; }
   textarea.pf-in { min-height:70px; }
   .pf-medidas { display:grid; grid-template-columns:1fr 1fr; gap:0 10px; }
+  .crit-grid { display:grid; grid-template-columns:repeat(4,1fr); text-align:center; margin-top:10px; }
+  .crit-grid span { display:block; font-size:18px; font-weight:800; }
+  .crit-grid small { color:var(--mut); font-size:11px; }
+  .rev-card { border-top:1px solid var(--line); padding:12px 0; }
+  .nota-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:6px; }
 </style>
 </head>
 <body>
@@ -494,6 +499,10 @@
       <div class="crit"><div class="muted">1 = muito celular ou conversa. 5 = descansos rigorosos.</div><div class="stars" data-crit="foco"></div></div>
     </div>
     <div class="card">
+      <h2>Técnica e forma</h2>
+      <div class="crit"><div class="muted">1 = forma ruim, risco de lesão. 5 = execução perfeita e controlada.</div><div class="stars" data-crit="tec"></div></div>
+    </div>
+    <div class="card">
       <h2>Esforço percebido (RPE)</h2>
       <div class="crit"><div class="muted">1 = leve, longe da falha. 5 = perto da falha, carga mantida.</div><div class="stars" data-crit="rpe"></div></div>
     </div>
@@ -503,8 +512,16 @@
       <h2 style="margin-top:14px">Alertas</h2>
       <div class="chips" id="rAlert"></div>
     </div>
+    <div class="card">
+      <h2>Nota final</h2>
+      <div class="muted">De 0 a 10, considerando o treino inteiro.</div>
+      <div class="nota-grid" id="rNota" style="margin-top:10px"></div>
+      <div class="muted" id="rNotaTxt" style="margin-top:8px;text-align:center"></div>
+    </div>
     <button class="btn" id="rEnviar" disabled>Enviar avaliação</button>
   </section>
+
+  <section class="screen" id="s-reviews"></section>
 
   <!-- TELA 5: HISTÓRICO -->
 
@@ -524,10 +541,7 @@
       <div id="hChart" style="margin-top:10px"></div>
     </div>
     <div class="card">
-      <h2>Avaliações recebidas</h2>
-      <div class="chips" id="hFilters" style="margin-bottom:10px"></div>
-      <div id="hReviews"></div>
-      <h2 style="margin-top:18px">Treinos registrados</h2>
+      <h2>Treinos registrados</h2>
       <div id="hLogs"></div>
     </div>
   </section>
@@ -541,6 +555,7 @@
   <button data-go="s-hub"><span class="ic">🏠</span>Início</button>
   <button data-go="s-workout"><span class="ic">💪</span>Treino</button>
   <button data-go="s-library"><span class="ic">📚</span>Biblioteca</button>
+  <button data-go="s-reviews"><span class="ic">⭐</span>Avaliações</button>
   <button data-go="s-dupla"><span class="ic">👥</span>Dupla</button>
   <button data-go="s-profile"><span class="ic">👤</span>Perfil</button>
 </nav>
@@ -597,6 +612,7 @@ const GOOD = ["Monstro da Carga","Sem Enrolação","Foco de Pedra","Técnica Per
 const ALERT = ["WhatsApp Master","Descanso Infinito","Carga Leve","Faltou Série"];
 const LABELS_FOCO = ["","Muito distraído","Pouco foco","Foco razoável","Foco bom","Foco de pedra"];
 const LABELS_RPE = ["","Muito leve","Leve","Moderado","Intenso","Perto da falha"];
+const LABELS_TEC = ["","Forma ruim","Precisa ajustar","Razoável","Boa","Execução perfeita"];
 
 /* ===================== ESTADO ===================== */
 const KEY = "raygeo-fit-v1";
@@ -877,6 +893,7 @@ function render(id){
   if(id === "s-review") renderReview();
   if(id === "s-profile") renderProfile();
   if(id === "s-dupla"){ renderDupla(); renderHistory(); }
+  if(id === "s-reviews") renderAvaliacoes();
   if(id === "s-routine") renderRoutineEditor();
   if(id === "s-library") renderLibrary();
 }
@@ -1152,7 +1169,7 @@ function toggleDone(id){
 
 /* ===================== TELA: AVALIAÇÃO ===================== */
 let draft = null;
-function newDraft(){ return { exec:new Set(), foco:0, rpe:0, badges:new Set() }; }
+function newDraft(){ return { exec:new Set(), foco:0, rpe:0, tec:0, nota10:null, badges:new Set() }; }
 
 function renderReview(){
   const p = other(state.me);
@@ -1170,9 +1187,9 @@ function renderReview(){
   const pct = items.length ? Math.round(draft.exec.size/items.length*100) : 0;
   document.getElementById("rExecPct").textContent = `Execução: ${pct}%`;
 
-  ["foco","rpe"].forEach(c => {
+  ["foco","tec","rpe"].forEach(c => {
     const box = document.querySelector(`[data-crit="${c}"]`);
-    const labels = c === "foco" ? LABELS_FOCO : LABELS_RPE;
+    const labels = c === "foco" ? LABELS_FOCO : c === "tec" ? LABELS_TEC : LABELS_RPE;
     box.innerHTML = [1,2,3,4,5].map(n =>
       `<button class="star ${draft[c]>=n?"on":""}" data-crit="${c}" data-n="${n}">${n}</button>`).join("")
       + (draft[c] ? `<span class="muted" style="align-self:center;margin-left:6px">${labels[draft[c]]}</span>` : "");
@@ -1183,7 +1200,10 @@ function renderReview(){
   document.getElementById("rAlert").innerHTML = ALERT.map(b =>
     `<button class="tagbtn alerta ${draft.badges.has(b)?"on":""}" data-badge="${b}">${b}</button>`).join("");
 
-  document.getElementById("rEnviar").disabled = !(draft.foco>0 && draft.rpe>0 && draft.exec.size>0);
+  document.getElementById("rNota").innerHTML = [0,1,2,3,4,5,6,7,8,9,10].map(n =>
+    `<button class="chip ${draft.nota10===n?"on":""}" data-nota="${n}" style="padding:10px 0;text-align:center">${n}</button>`).join("");
+  document.getElementById("rNotaTxt").textContent = draft.nota10 !== null ? `Nota ${draft.nota10}/10` : "";
+  document.getElementById("rEnviar").disabled = !(draft.foco>0 && draft.tec>0 && draft.rpe>0 && draft.exec.size>0 && draft.nota10 !== null);
 }
 function toggleExec(i){
   if(!draft) draft = newDraft();
@@ -1206,7 +1226,7 @@ function enviarAvaliacao(){
   const execPct = Math.round(draft.exec.size/items.length*100);
 
   s.confirmado = true;
-  s.avaliacao = { foco:draft.foco, esforco:draft.rpe, execPct, badges:[...draft.badges], por:state.me, em:new Date().toISOString(), nota:s.nota||"" };
+  s.avaliacao = { foco:draft.foco, tecnica:draft.tec, nota10:draft.nota10, esforco:draft.rpe, execPct, badges:[...draft.badges], por:state.me, em:new Date().toISOString(), nota:s.nota||"" };
 
   const exercicios = items.map(({e,id}) => {
     const rows = (s.rows && s.rows[id]) || [];
@@ -1253,21 +1273,6 @@ function renderHistory(){
   } else {
     chart.innerHTML = `<p class="muted">${pts.length ? "Só um registro até agora. O gráfico aparece a partir do segundo treino." : "Nenhum treino concluído com este exercício ainda."}</p>`;
   }
-
-  document.getElementById("hFilters").innerHTML = [["all","Todas"],["good","Com condecorações"],["alert","Com alertas"]]
-    .map(([k,l]) => `<button class="chip ${reviewFilter===k?"on":""}" data-hf="${k}">${l}</button>`).join("");
-
-  const avals = reviewsOf(histPerson).filter(a => {
-    if(reviewFilter === "good") return a.badges.some(b => GOOD.includes(b));
-    if(reviewFilter === "alert") return a.badges.some(b => ALERT.includes(b));
-    return true;
-  });
-  document.getElementById("hReviews").innerHTML = avals.length ? avals.map(a => `
-    <div style="border-top:1px solid var(--line);padding-top:10px;margin-top:10px">
-      <div class="row"><strong>${a.data}</strong><span class="muted">por ${PEOPLE[a.por]}</span></div>${a.nota?`<div class="muted" style="margin-top:4px;font-style:italic">“${esc(a.nota)}”</div>`:""}
-      <div style="margin-top:4px;font-size:14px">Foco ${a.foco}/5 · Esforço ${a.esforco}/5 · Execução ${a.execPct}%</div>
-      ${a.badges.length ? `<div class="chips" style="margin-top:6px">${a.badges.map(b=>`<span class="pill ${GOOD.includes(b)?"ok":"wait"}">${b}</span>`).join("")}</div>` : ""}
-    </div>`).join("") : `<p class="muted">Nenhuma avaliação com esse filtro.</p>`;
 
   const logsP = state.log.filter(l => l.who === histPerson && l.data).slice().reverse();
   document.getElementById("hLogs").innerHTML = logsP.length ? logsP.map(l => `
@@ -1803,6 +1808,76 @@ function profileOf(who){
   };
 }
 
+/* ===================== AVALIAÇÕES (aba própria) ===================== */
+let revFiltro = "all";
+const mediaDe = (arr, k) => { const v = arr.map(a => a[k]).filter(x => typeof x === "number"); return v.length ? (v.reduce((a,b) => a+b, 0)/v.length).toFixed(1) : "—"; };
+function cardAvaliacao(a){
+  const crit = [["Foco", a.foco, "/5"], ["Técnica", a.tecnica, "/5"], ["Esforço", a.esforco, "/5"], ["Execução", a.execPct, "%"]];
+  return `
+    <div class="rev-card">
+      <div class="row"><strong>${dmy(a.data)}</strong><span><b style="font-size:18px">${a.nota10 ?? "—"}</b><span class="muted">/10 · por ${PEOPLE[a.por]}</span></span></div>
+      <div class="crit-grid">
+        ${crit.map(([r,v,u]) => `<div><span>${(v ?? v===0) && v !== undefined ? v+u : "—"}</span><small>${r}</small></div>`).join("")}
+      </div>
+      ${a.nota ? `<div class="muted" style="margin-top:6px;font-style:italic">“${esc(a.nota)}”</div>` : ""}
+      ${a.badges && a.badges.length ? `<div class="chips" style="margin-top:8px">${a.badges.map(b => `<span class="pill ${GOOD.includes(b)?"ok":"wait"}">${b}</span>`).join("")}</div>` : ""}
+    </div>`;
+}
+function renderAvaliacoes(){
+  const me = state.me, p = other(me);
+  const recebidas = reviewsOf(me).sort((a,b) => b.data.localeCompare(a.data));
+  const filtradas = recebidas.filter(a =>
+    revFiltro === "good" ? a.badges.some(b => GOOD.includes(b)) :
+    revFiltro === "alert" ? a.badges.some(b => ALERT.includes(b)) : true);
+  const hoje = todayKey();
+  const pendentes = Object.entries(state.sessions)
+    .filter(([k,s]) => k.startsWith(hoje+"|") && k.endsWith("|"+p) && s.feitoEm && !s.confirmado)
+    .map(([k]) => ({ day: k.split("|")[1] }));
+  const feitas = Object.entries(state.sessions)
+    .filter(([k,s]) => s.avaliacao && s.avaliacao.por === me)
+    .map(([k,s]) => ({ ...s.avaliacao, data: k.split("|")[0], who: k.split("|")[2] }))
+    .sort((a,b) => b.data.localeCompare(a.data));
+
+  document.getElementById("s-reviews").innerHTML = `
+    <div class="row"><h1 style="font-size:18px">Avaliações</h1></div>
+
+    <div class="card">
+      <h2>Médias das avaliações recebidas</h2>
+      <div class="prof-stats">
+        <div><span>${mediaDe(recebidas,"nota10")}</span><small>Nota /10</small></div>
+        <div><span>${mediaDe(recebidas,"foco")}</span><small>Foco</small></div>
+        <div><span>${mediaDe(recebidas,"tecnica")}</span><small>Técnica</small></div>
+        <div><span>${recebidas.length ? Math.round(recebidas.reduce((t,a)=>t+(a.execPct||0),0)/recebidas.length)+"%" : "—"}</span><small>Execução</small></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Pendentes para avaliar</h2>
+      ${pendentes.length ? pendentes.map(x => `
+        <div class="prof-row">
+          <span>Treino de hoje · ${ROUTINE[x.day] ? ROUTINE[x.day].label : ""}</span>
+          <button class="chip on" data-avaliar="${x.day}">Avaliar ${PEOPLE[p]}</button>
+        </div>`).join("") : `<small class="muted">Nenhum treino da ${PEOPLE[p]} aguardando avaliação hoje.</small>`}
+    </div>
+
+    <div class="card">
+      <h2>Recebidas</h2>
+      <div class="chips" style="margin-bottom:10px">
+        ${[["all","Todas"],["good","Com condecorações"],["alert","Com alertas"]].map(([k,l]) => `<button class="chip ${revFiltro===k?"on":""}" data-hr="${k}">${l}</button>`).join("")}
+      </div>
+      ${filtradas.length ? filtradas.map(cardAvaliacao).join("") : `<p class="muted">Nenhuma avaliação com esse filtro.</p>`}
+    </div>
+
+    <div class="card">
+      <h2>Que eu avaliei</h2>
+      ${feitas.length ? feitas.map(a => `
+        <div class="prof-row" style="font-size:13px">
+          <span>${dmy(a.data)} · ${PEOPLE[a.who]}</span>
+          <strong>Nota ${a.nota10 ?? "—"}/10 · Foco ${a.foco}/5</strong>
+        </div>`).join("") : `<small class="muted">Você ainda não avaliou nenhum treino.</small>`}
+    </div>`;
+}
+
 /* ===================== PERFIL PESSOAL E DUPLA ===================== */
 let perfilEditando = false;
 const perfilOf = w => (state.perfil && state.perfil[w]) || {};
@@ -1945,6 +2020,12 @@ function renderDupla(){
 document.addEventListener("click", e => {
   const t = e.target;
   if(!t || !t.closest) return;
+  const nb = t.closest("[data-nota]");
+  if(nb){ if(!draft) draft = newDraft(); draft.nota10 = +nb.dataset.nota; return renderReview(); }
+  const hr = t.closest("[data-hr]");
+  if(hr){ revFiltro = hr.dataset.hr; return renderAvaliacoes(); }
+  const av = t.closest("[data-avaliar]");
+  if(av){ activeDay = av.dataset.avaliar; draft = null; return show("s-review"); }
   if(t.id === "btnEditarPerfil"){ perfilEditando = !perfilEditando; return renderProfile(); }
   if(t.id === "btnSalvarPerfil"){
     const v = {};
